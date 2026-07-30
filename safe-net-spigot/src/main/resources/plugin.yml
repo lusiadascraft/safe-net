@@ -6,6 +6,7 @@ main: dev.dejvokep.safenet.spigot.SafeNetSpigot
 description: ${parent.description}
 api-version: 1.13
 load: STARTUP
+folia-supported: true
 # Dependencies:
 softdepend:
   - ProtocolLib
