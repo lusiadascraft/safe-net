@@ -42,7 +42,7 @@ public class PassphraseVault {
     public static final int WEAK_PASSPHRASE_LENGTH_THRESHOLD = 50;
 
     // Passphrase
-    private String passphrase, propertyName;
+    private volatile String passphrase, propertyName;
 
     // Config
     private final YamlDocument config;
