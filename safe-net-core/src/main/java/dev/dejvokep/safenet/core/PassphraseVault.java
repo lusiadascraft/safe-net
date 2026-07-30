@@ -41,8 +41,10 @@ public class PassphraseVault {
      */
     public static final int WEAK_PASSPHRASE_LENGTH_THRESHOLD = 50;
 
-    // Passphrase
-    private volatile String passphrase, propertyName;
+    /**
+     * Immutable credentials snapshot. A reload publishes both values with one volatile write.
+     */
+    private volatile Credentials credentials;
 
     // Config
     private final YamlDocument config;
@@ -56,10 +58,8 @@ public class PassphraseVault {
      * @param logger the logger
      */
     public PassphraseVault(@NotNull YamlDocument config, @NotNull Logger logger) {
-        // Set
         this.config = config;
         this.logger = logger;
-        // Reload
         reload();
     }
 
@@ -69,13 +69,10 @@ public class PassphraseVault {
      * @param length the desired length of the new passphrase (<code>length > 0</code>)
      */
     public final void generatePassphrase(int length) throws IOException {
-        // If the length is less than 1
         if (length < 1)
             return;
 
-        // Set into the config
         config.set("passphrase", KeyGenerator.generate(length));
-        // Save
         config.save();
     }
 
@@ -90,17 +87,23 @@ public class PassphraseVault {
      * @return the passphrase status
      */
     public String getPassphraseStatus() {
-        return passphrase.length() == 0 ? "invalid" : passphrase.length() < WEAK_PASSPHRASE_LENGTH_THRESHOLD ? "weak" : "valid";
+        String passphrase = credentials.getPassphrase();
+        return passphrase.length() == 0
+                ? "invalid"
+                : passphrase.length() < WEAK_PASSPHRASE_LENGTH_THRESHOLD ? "weak" : "valid";
     }
 
     /**
-     * Reloads the passphrase components.
+     * Reloads the passphrase components and publishes them atomically.
      */
     public void reload() {
-        // Passphrase
-        passphrase = config.getString("passphrase", "");
-        propertyName = config.getString("property-name.handshake", DEFAULT_PASSPHRASE_PROPERTY_NAME);
-        // Print status
+        String loadedPassphrase = config.getString("passphrase", "");
+        String loadedPropertyName = config.getString(
+                "property-name.handshake",
+                DEFAULT_PASSPHRASE_PROPERTY_NAME
+        );
+
+        credentials = new Credentials(loadedPassphrase, loadedPropertyName);
         printStatus();
     }
 
@@ -108,11 +111,21 @@ public class PassphraseVault {
      * Prints the passphrase status.
      */
     public void printStatus() {
-        // Log the warning
+        String passphrase = credentials.getPassphrase();
+
         if (passphrase.length() == 0)
             logger.severe("No passphrase configured (length is 0)! The plugin will disconnect all incoming connections. Please generate one as soon as possible from the proxy console with \"/sn generate\".");
         else if (passphrase.length() < WEAK_PASSPHRASE_LENGTH_THRESHOLD)
             logger.warning("The configured passphrase is weak! It should be at least " + WEAK_PASSPHRASE_LENGTH_THRESHOLD + " characters long; though the recommended length is " + RECOMMENDED_PASSPHRASE_LENGTH + ". Please generate one as soon as possible from the proxy console with \"/sn generate\".");
+    }
+
+    /**
+     * Returns one immutable snapshot containing the current passphrase and property name.
+     *
+     * @return the current credentials snapshot
+     */
+    public Credentials getCredentials() {
+        return credentials;
     }
 
     /**
@@ -121,7 +134,7 @@ public class PassphraseVault {
      * @return the passphrase
      */
     public String getPassphrase() {
-        return passphrase;
+        return credentials.getPassphrase();
     }
 
     /**
@@ -130,6 +143,28 @@ public class PassphraseVault {
      * @return the property name
      */
     public String getPropertyName() {
-        return propertyName;
+        return credentials.getPropertyName();
+    }
+
+    /**
+     * Immutable pair of values used during authentication.
+     */
+    public static final class Credentials {
+
+        private final String passphrase;
+        private final String propertyName;
+
+        public Credentials(@NotNull String passphrase, @NotNull String propertyName) {
+            this.passphrase = passphrase;
+            this.propertyName = propertyName;
+        }
+
+        public String getPassphrase() {
+            return passphrase;
+        }
+
+        public String getPropertyName() {
+            return propertyName;
+        }
     }
 }
