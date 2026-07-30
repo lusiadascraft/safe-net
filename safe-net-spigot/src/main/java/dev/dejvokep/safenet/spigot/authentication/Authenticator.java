@@ -22,6 +22,7 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import com.mojang.authlib.properties.PropertyMap;
 import dev.dejvokep.safenet.core.KeyGenerator;
+import dev.dejvokep.safenet.core.PassphraseVault;
 import dev.dejvokep.safenet.spigot.SafeNetSpigot;
 import dev.dejvokep.safenet.spigot.authentication.result.AuthenticationResult;
 import dev.dejvokep.safenet.spigot.authentication.result.HandshakeAuthenticationResult;
@@ -97,7 +98,7 @@ public class Authenticator {
 
     // Session key used to protect against uncaught handshakes and property name
     private final String sessionKey = KeyGenerator.generate(SESSION_KEY_LENGTH);
-    private String sessionPropertyName;
+    private volatile String sessionPropertyName;
     // Class and method necessary for profile manipulation
     private Class<?> craftPlayerClass = null;
     private Method profileMethod = null;
@@ -131,8 +132,10 @@ public class Authenticator {
      * @return the result
      */
     public HandshakeAuthenticationResult handshake(@Nullable String data) {
-        // Passphrase
-        String passphrase = plugin.getPassphraseVault().getPassphrase();
+        // Read one immutable credentials snapshot for the entire handshake
+        PassphraseVault.Credentials credentials = plugin.getPassphraseVault().getCredentials();
+        String passphrase = credentials.getPassphrase();
+        String passphrasePropertyName = credentials.getPropertyName();
         // If null
         if (data == null)
             return new HandshakeAuthenticationResult(AuthenticationResult.HANDSHAKE_MALFORMED_DATA);
@@ -217,7 +220,7 @@ public class Authenticator {
                     continue;
 
                 // If the names equal
-                if (property.getName().equals(plugin.getPassphraseVault().getPropertyName())) {
+                if (property.getName().equals(passphrasePropertyName)) {
                     // Remove the property
                     properties.remove(index);
 
@@ -270,6 +273,10 @@ public class Authenticator {
             return AuthenticationResult.SESSION_REFLECTION_UNAVAILABLE;
 
         try {
+            // Read all reloadable values once for this session authentication
+            String currentSessionPropertyName = sessionPropertyName;
+            String passphrasePropertyName = plugin.getPassphraseVault().getCredentials().getPropertyName();
+
             // Profile
             GameProfile profile = (GameProfile) profileMethod.invoke(craftPlayerClass.cast(player));
             if (profile == null)
@@ -281,12 +288,12 @@ public class Authenticator {
                 return AuthenticationResult.SESSION_NO_PROPERTIES;
 
             // Exactly one property required
-            Collection<Property> properties = propertyMap.get(sessionPropertyName);
+            Collection<Property> properties = propertyMap.get(currentSessionPropertyName);
             if (properties.size() == 0)
                 return AuthenticationResult.SESSION_PROPERTY_NOT_FOUND;
 
             // Delete possible properties with the passphrase
-            propertyMap.removeAll(plugin.getPassphraseVault().getPropertyName());
+            propertyMap.removeAll(passphrasePropertyName);
 
             // If there are more entries
             if (properties.size() != 1)
@@ -296,7 +303,7 @@ public class Authenticator {
             Property property = properties.iterator().next();
             String name = propertyAccessor.getName(property), value = propertyAccessor.getValue(property);
             // Is this needed?
-            if (name == null || !name.equals(sessionPropertyName))
+            if (name == null || !name.equals(currentSessionPropertyName))
                 return AuthenticationResult.SESSION_PROPERTY_NOT_FOUND;
 
             // Compare keys
@@ -304,7 +311,7 @@ public class Authenticator {
                 return AuthenticationResult.SESSION_INVALID;
 
             // Past this point we don't really care about the exposure of the session key
-            propertyMap.removeAll(sessionPropertyName);
+            propertyMap.removeAll(currentSessionPropertyName);
 
             // Passed
             return AuthenticationResult.SUCCESS;
