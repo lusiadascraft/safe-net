@@ -119,7 +119,7 @@ public class SafeNetSpigot extends JavaPlugin {
         }
 
         // Postpone messages
-        Bukkit.getScheduler().runTaskLater(this, () -> {
+        getServer().getGlobalRegionScheduler().runDelayed(this, task -> {
             // Thank you message
             getLogger().info("Thank you for downloading SafeNET!");
             // Print
