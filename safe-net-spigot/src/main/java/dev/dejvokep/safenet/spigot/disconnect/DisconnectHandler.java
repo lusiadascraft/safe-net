@@ -38,7 +38,7 @@ public class DisconnectHandler {
     private static final String DEFAULT_DISCONNECT_MESSAGE = "Disconnected";
 
     // Disconnect message
-    private String message;
+    private volatile String message;
     // Plugin
     private final SafeNetSpigot plugin;
 
