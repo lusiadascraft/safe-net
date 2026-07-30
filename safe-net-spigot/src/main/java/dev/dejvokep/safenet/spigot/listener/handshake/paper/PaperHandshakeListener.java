@@ -27,6 +27,8 @@ import org.jetbrains.annotations.NotNull;
 
 import java.lang.reflect.Field;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 /**
@@ -43,8 +45,8 @@ public class PaperHandshakeListener extends AbstractHandshakeListener implements
 
     // Handshake field
     private Field originalHandshakeField;
-    // Failed handshake
-    private String failed = null;
+    // Failed handshakes being monitored
+    private final Set<PlayerHandshakeEvent> failedHandshakes = ConcurrentHashMap.newKeySet();
 
     /**
      * Registers the handshake listener.
@@ -105,6 +107,9 @@ public class PaperHandshakeListener extends AbstractHandshakeListener implements
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onHandshakeManipulation(PlayerHandshakeEvent event) {
+        // Remove this event from the monitored set before validating its final state
+        boolean failedBySafeNet = failedHandshakes.remove(event);
+
         // If cancelled
         if (event.isCancelled()) {
             getPlugin().getLogger().warning("A plugin cancelled the handshake event, bypassing SafeNET logic! Plugins should restrain from such behaviour due to several security reasons; report such usage to the developer. Shutting down...");
@@ -112,8 +117,8 @@ public class PaperHandshakeListener extends AbstractHandshakeListener implements
             return;
         }
 
-        // If not to fail
-        if (failed == null || !failed.equals(event.getOriginalHandshake()))
+        // If SafeNET did not fail this specific handshake
+        if (!failedBySafeNet)
             return;
 
         // If fail is revoked
@@ -125,7 +130,6 @@ public class PaperHandshakeListener extends AbstractHandshakeListener implements
 
         // Fail just in case
         event.setFailed(true);
-        failed = null;
     }
 
     /**
@@ -139,7 +143,7 @@ public class PaperHandshakeListener extends AbstractHandshakeListener implements
         event.setCancelled(false);
         event.setFailed(true);
         event.setFailMessage(getPlugin().getDisconnectHandler().getMessage());
-        failed = event.getOriginalHandshake();
+        failedHandshakes.add(event);
     }
 
     @Override
