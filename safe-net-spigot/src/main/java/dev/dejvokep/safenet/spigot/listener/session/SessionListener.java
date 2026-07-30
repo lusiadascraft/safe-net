@@ -27,6 +27,9 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 /**
@@ -43,11 +46,11 @@ public class SessionListener implements Listener {
      * Message logged when a connection was accepted.
      */
     private static final String MESSAGE_ACCEPTED = "ACCEPTED (code B%d): Authenticated \"%s\" (%s).";
-    
+
     // Plugin
     private final SafeNetSpigot plugin;
-    // Kicked player
-    private Player kicked = null;
+    // Players being disconnected
+    private final Set<UUID> kickedPlayers = ConcurrentHashMap.newKeySet();
 
     /**
      * Registers the session listener.
@@ -57,7 +60,7 @@ public class SessionListener implements Listener {
     public SessionListener(SafeNetSpigot plugin) {
         // Set
         this.plugin = plugin;
-        
+
         // Register
         Bukkit.getPluginManager().registerEvents(this, plugin);
         plugin.getEventPusher().push(PlayerJoinEvent.getHandlerList(), EventPriority.LOWEST, this);
@@ -81,10 +84,11 @@ public class SessionListener implements Listener {
         plugin.getLogger().warning(String.format(MESSAGE_DENIED, result.getCode(), player.getName(), player.getUniqueId(), result.getMessage()));
 
         // Kick
-        kicked = player;
+        UUID playerId = player.getUniqueId();
+        kickedPlayers.add(playerId);
         plugin.getDisconnectHandler().play(player);
-        // If null, player got disconnected
-        if (kicked == null)
+        // If absent, player got disconnected
+        if (!kickedPlayers.contains(playerId))
             return;
 
         // Log
@@ -95,7 +99,7 @@ public class SessionListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onKick(PlayerKickEvent event) {
         // If not to kick
-        if (kicked != event.getPlayer())
+        if (!kickedPlayers.contains(event.getPlayer().getUniqueId()))
             return;
 
         // Revoke cancellation just in case
@@ -105,8 +109,7 @@ public class SessionListener implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         // Disconnected
-        if (kicked == event.getPlayer())
-            kicked = null;
+        kickedPlayers.remove(event.getPlayer().getUniqueId());
     }
 
 }
