@@ -40,7 +40,7 @@ public abstract class AbstractHandshakeListener {
     // Plugin
     private final SafeNetSpigot plugin;
     // If to block pings and it is available
-    private boolean blockPings, logConnectionData;
+    private volatile boolean blockPings, logConnectionData;
     private final boolean pingBlockingAvailable;
 
     public AbstractHandshakeListener(SafeNetSpigot plugin, boolean pingBlockingAvailable) {
